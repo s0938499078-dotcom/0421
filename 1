@@ -1,0 +1,107 @@
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import javax.swing.*;
+
+public class EdgeDetectionAssignment {
+
+    public static void main(String[] args) {
+        JFileChooser fileChooser = new JFileChooser();
+        if (fileChooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return;
+
+        File inputFile = fileChooser.getSelectedFile();
+
+        try {
+            ImageIcon icon = new ImageIcon(inputFile.getAbsolutePath());
+            Image rawImage = icon.getImage();
+
+            BufferedImage original = new BufferedImage(rawImage.getWidth(null), rawImage.getHeight(null), BufferedImage.TYPE_INT_RGB);
+            Graphics g = original.getGraphics();
+            g.drawImage(rawImage, 0, 0, null);
+            g.dispose();
+
+            // --- 調整模糊程度 ---
+            // 半徑 1 = 3x3 矩陣
+            // 半徑 2 = 5x5 矩陣 (更模糊)
+            // 半徑 3 = 7x7 矩陣 (非常模糊)
+            BufferedImage blurred = applyBlur(original, 2); 
+
+            int width = blurred.getWidth();
+            int height = blurred.getHeight();
+            BufferedImage output = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+
+            // 執行邊緣檢測 (一階導數公式) [cite: 27, 80, 82]
+            for (int x = 2; x < width - 2; x++) {
+                for (int y = 2; y < height - 2; y++) {
+                    // Ix = [f(x+1, y) - f(x-1, y)] / 2 [cite: 30, 82]
+                    float ix = (getGray(blurred.getRGB(x + 1, y)) - getGray(blurred.getRGB(x - 1, y))) / 2.0f;
+
+                    // 輸出像斑馬圖一樣的灰色導數效果 [cite: 57, 62]
+                    int edgeValue = (int)(ix + 128); 
+                    edgeValue = Math.min(255, Math.max(0, edgeValue));
+
+                    int rgb = (edgeValue << 16) | (edgeValue << 8) | edgeValue;
+                    output.setRGB(x, y, rgb);
+                }
+            }
+
+            showWindow(output, "高強度模糊後的邊緣檢測");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * 加強版模糊方法 (支援自定義半徑) 
+     * @param radius 模糊半徑，數字越大越模糊
+     */
+    private static BufferedImage applyBlur(BufferedImage img, int radius) {
+        int w = img.getWidth();
+        int h = img.getHeight();
+        BufferedImage result = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        
+        int kernelSize = (radius * 2 + 1);
+        int totalPixels = kernelSize * kernelSize;
+
+        for (int x = radius; x < w - radius; x++) {
+            for (int y = radius; y < h - radius; y++) {
+                long r = 0, g = 0, b = 0;
+                
+                // 動態遍歷周圍像素進行平均計算
+                for (int i = -radius; i <= radius; i++) {
+                    for (int j = -radius; j <= radius; j++) {
+                        int rgb = img.getRGB(x + i, y + j);
+                        r += (rgb >> 16) & 0xff;
+                        g += (rgb >> 8) & 0xff;
+                        b += rgb & 0xff;
+                    }
+                }
+                
+                int finalR = (int)(r / totalPixels);
+                int finalG = (int)(g / totalPixels);
+                int finalB = (int)(b / totalPixels);
+                
+                int rgb = (finalR << 16) | (finalG << 8) | finalB;
+                result.setRGB(x, y, rgb);
+            }
+        }
+        return result;
+    }
+
+    private static int getGray(int rgb) {
+        int r = (rgb >> 16) & 0xff;
+        int g = (rgb >> 8) & 0xff;
+        int b = (rgb) & 0xff;
+        return (int) (0.299 * r + 0.587 * g + 0.114 * b);
+    }
+
+    private static void showWindow(BufferedImage img, String title) {
+        JFrame frame = new JFrame(title);
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.add(new JScrollPane(new JLabel(new ImageIcon(img))));
+        frame.setSize(800, 600);
+        frame.setLocationRelativeTo(null);
+        frame.setVisible(true);
+    }
+}
